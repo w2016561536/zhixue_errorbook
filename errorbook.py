@@ -711,7 +711,7 @@ def read_question(teacher: Session, difficulty: str, knowledgeid: list, subjects
     if len(gradecode) == 1:
         gradecode = "0" + gradecode
     # 这里定义了无视难度
-    difficulty = "01;02;03"
+    #difficulty = "01;02;03"
     # print(u_tch_info[1],u_tch_info[2])
     firstget = using_tch_session.get("https://www.zhixue.com/paperfresh/api/question/show/knowledge/getTopics?pageIndex=1&knowledgeSelectType=0&knowledgeType=0&knowledgeId=" + coventlist(knowledgeid) + "&paperId=&level=0&gradeCode=" + gradecode + "&sectionCode=&difficultyCode=" + difficulty +
                                      "&paperTypeCode=&topicFromCode=&areas=&year=&sortField=default&sortDirection=true&keyWord=+&knowledgeTag=01&keywordSearchField=topic&excludePapers=&isRelatedPapers=true", data="phaseCode=05&subjectCode="+subjectscode, verify=isVerifysslCert, headers=editheaders, cookies=teacher.cookies)
