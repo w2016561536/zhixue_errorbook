@@ -1,24 +1,25 @@
-import os
-import sys
-from typing import Pattern, SupportsRound
-import requests
-from requests import utils
-from requests import cookies
-import json
-from requests.api import head, request
+
+import datetime
 import hashlib
+import json
+import os
+import random
+import sys
+import time
+import urllib
+from typing import Pattern, SupportsRound
+import easygui
+import requests
+from requests import cookies, utils
+from requests.api import head, request
 from requests.models import Response
 from requests.sessions import Session, session
-import random
-import time
-import datetime
-import urllib
 
-isVerifysslCert = True  # 需要网络调试请改为False
-requestdelay = 6  #教师账号推题请求延时，单位秒
+isVerifysslCert = False  # 需要网络调试请改为False
+requestdelay = 8  # 教师账号推题请求延时，单位秒
 global needsaveuseranswer
-needsaveuseranswer = True #是否保存自己的错误答案
-config_stu_name = "" #配置默认学生账号密码，留空代表每次询问
+needsaveuseranswer = True  # 是否保存自己的错误答案
+config_stu_name = ""  # 配置默认学生账号密码，留空代表每次询问
 config_stu_pwd = ""
 
 editheaders = {
@@ -163,13 +164,23 @@ def paddind(fHexArray: list, keylen: int):
     return fHexArray
 
 
-def relogin(username, typepwd, isrelogin):
+def relogin(username, typepwd, isrelogin, moreinfo):
     print("正在尝试重新登陆")
-    msg = loginwithpwd(username, typepwd, isrelogin)
+    msg = loginwithpwd(username, typepwd, isrelogin, moreinfo)
     return msg
 
 
-def loginwithpwd(username, typepwd, isrelogin):
+def download_img(sessions: Session, url):
+    # 下载图片
+    r = sessions.get(url, stream=True)
+    locate = './img_{}.png'.format(0)
+    if r.status_code == 200:
+        open(locate, 'wb').write(r.content)  # 将内容写入图片
+    del r
+    return locate
+
+
+def loginwithpwd(username, typepwd, isrelogin, moreinfo):
     # rc4-登陆
     weakpwdsession = requests.Session()
     password = encryRC4String(typepwd, "iflytzhixueweb", chartSet='utf-8')
@@ -183,22 +194,31 @@ def loginwithpwd(username, typepwd, isrelogin):
                                     verify=isVerifysslCert,
                                     headers=editheaders,
                                     data="loginName=" + username + "&password=" +
-                                    password + "&code=&description=encrypt",
+                                    password + "&description=encrypt" + moreinfo,
                                     cookies=weakpwdsession.cookies)
     resforweaklogin = weaklogin.json()
     if resforweaklogin["result"] == "success":
         # print(resforweaklogin["data"])
         weakpwdsession.cookies["ui"] = resforweaklogin["data"]
     else:
+        if (resforweaklogin["message"].index("验证码")) != -1:
+            isrelogin = 0
         if isrelogin == 0:
             print("登陆失败："+resforweaklogin["message"])
-            msg = relogin(username, typepwd, isrelogin+1)
+            if (resforweaklogin["message"].index("验证码")) != -1:
+                uuid = makeauthtoken()[1]
+                locate = download_img(
+                    weakpwdsession, "https://www.zhixue.com/login/forgetpwd/getImageCode??token=0.668465465484&uuid="+uuid)
+                yzm = easygui.enterbox(msg="请输入验证码", image=locate)
+                isrelogin = 0
+            msg = relogin(username, typepwd, isrelogin+1,
+                          "&code=" + yzm + "&uuid="+uuid)
             return msg
         elif isrelogin == 1:
             print("登陆失败："+resforweaklogin["message"])
             anme = input("登陆失败，请重新输入用户名尝试：")
             pwd = input("请重新输入密码：")
-            msg = relogin(anme, pwd, isrelogin+1)
+            msg = relogin(anme, pwd, isrelogin+1, "")
             return msg
         else:
             print("登陆失败："+resforweaklogin["message"])
@@ -219,13 +239,13 @@ def loginwithpwd(username, typepwd, isrelogin):
     if makeloginreq.json()["errorCode"] != 0:
         if isrelogin == 0:
             print("出错了！！\n响应码："+str(makeloginreq.json()["errorCode"]))
-            msg = relogin(username, typepwd, isrelogin+1)
+            msg = relogin(username, typepwd, isrelogin+1, "")
             return msg
         elif isrelogin == 1:
             print("出错了！！\n响应码："+str(makeloginreq.json()["errorCode"]))
             anme = input("登陆失败，请重新输入用户名尝试：")
             pwd = input("请重新输入密码：")
-            msg = relogin(anme, pwd, isrelogin+1)
+            msg = relogin(anme, pwd, isrelogin+1, "")
             return msg
         else:
             print("出错了！！\n响应码："+str(makeloginreq.json()["errorCode"]))
@@ -274,14 +294,14 @@ def loginwithpwd(username, typepwd, isrelogin):
         if isrelogin == 0:
             print("登陆失败：" + "\n响应码：" + str(result) +
                   "\n信息：" + st_json["message"])
-            msg = relogin(username, typepwd, isrelogin+1)
+            msg = relogin(username, typepwd, isrelogin+1, "")
             return msg
         elif isrelogin == 1:
             print("登陆失败：" + "\n响应码：" + str(result) +
                   "\n信息：" + st_json["message"])
             anme = input("登陆失败，请重新输入用户名尝试：")
             pwd = input("请重新输入密码：")
-            msg = relogin(anme, pwd, isrelogin+1)
+            msg = relogin(anme, pwd, isrelogin+1, "")
             return msg
         else:
             print("登陆失败：" + "\n响应码：" + str(result) +
@@ -308,14 +328,14 @@ def loginwithpwd(username, typepwd, isrelogin):
         if isrelogin == 0:
             print("登陆失败：" + "\n响应码：" +
                   str(userinfo["errorCode"]) + "\n信息：" + userinfo["errorInfo"])
-            msg = relogin(username, typepwd, isrelogin+1)
+            msg = relogin(username, typepwd, isrelogin+1, "")
             return msg
         elif isrelogin == 1:
             print("登陆失败：" + "\n响应码：" +
                   str(userinfo["errorCode"]) + "\n信息：" + userinfo["errorInfo"])
             anme = input("登陆失败，请重新输入用户名尝试：")
             pwd = input("请重新输入密码：")
-            msg = relogin(anme, pwd, isrelogin+1)
+            msg = relogin(anme, pwd, isrelogin+1, "")
             return msg
         else:
             print("登陆失败：" + "\n响应码：" +
@@ -380,7 +400,7 @@ def timecovent(timestamp: str):
     return otherStyleTime
 
 
-def geterrorlists(session: Session, subject: str, begintime: str, endtime: str, gradecode: str, hardcount: int, easycount: int, subjectname: str, teachers: Session,requiresametype:bool,tchlist:list):
+def geterrorlists(session: Session, subject: str, begintime: str, endtime: str, gradecode: str, hardcount: int, easycount: int, subjectname: str, teachers: Session, requiresametype: bool, tchlist: list):
     re_fresh_auth_token(headerforerrbook)
     rawrespond = session.get("https://www.zhixue.com/addon/app/errorbook/getErrorbookList?subjectCode=" +
                              subject+"&beginTime="+begintime+"&endTime="+endtime+"&pageIndex=1&pageSize=10", headers=headerforerrbook, verify=isVerifysslCert, cookies=session.cookies)
@@ -402,12 +422,12 @@ def geterrorlists(session: Session, subject: str, begintime: str, endtime: str, 
         switchtch = switchtch[0]
         if isinstance(switchtch, str) == False:
             changesub = switchtch.post("https://www.zhixue.com/paperfresh/api/common/switchSubject",
-                                    data="phaseCode=05&subjectCode="+subjectcode, verify=isVerifysslCert, headers=editheaders)
+                                       data="phaseCode=05&subjectCode="+subjectcode, verify=isVerifysslCert, headers=editheaders)
             time.sleep(requestdelay/len(tchAccount))
             while changesub.status_code != 200:
                 input("出错了：状态码：" + str(changesub.status_code))
                 changesub = switchtch.post("https://www.zhixue.com/paperfresh/api/common/switchSubject",
-                                        data="phaseCode=05&subjectCode="+subjectcode, verify=isVerifysslCert, headers=editheaders)
+                                           data="phaseCode=05&subjectCode="+subjectcode, verify=isVerifysslCert, headers=editheaders)
                 time.sleep(requestdelay/len(tchAccount))
             changesub = json.loads(changesub.text)
             throwerror(changesub)
@@ -415,7 +435,7 @@ def geterrorlists(session: Session, subject: str, begintime: str, endtime: str, 
     htmltext = "<html><haed><meta charset=\"utf-8\"></head><body><style>p{Margin:0px;}</style><p align=center style='text-align:center'><span style='font-size:22.0pt;mso-bidi-font-size:24.0pt'><strong>" + \
         username + "的" + subjectname + "错题本</strong></span></p><br>"
     processed = processerrorbook(
-        rawrespond, fstart, gradecode, hardcount, easycount, teachers,requiresametype)
+        rawrespond, fstart, gradecode, hardcount, easycount, teachers, requiresametype)
     htmltext += processed[0]
     fstart = processed[1]
     for page in pages:
@@ -429,12 +449,13 @@ def geterrorlists(session: Session, subject: str, begintime: str, endtime: str, 
             input("回车退出程序")
             exit()
         processed = processerrorbook(
-            rawrespond, fstart, gradecode,  hardcount, easycount, teachers,requiresametype)
+            rawrespond, fstart, gradecode,  hardcount, easycount, teachers, requiresametype)
         htmltext += processed[0]
         fstart = processed[1]
     return htmltext
 
-def switch_tch (tchlist:list,usingtch:Session,usinginfo:list):
+
+def switch_tch(tchlist: list, usingtch: Session, usinginfo: list):
     totalcount = len(tchlist)
     nowcount = tchlist.index(usinginfo)
     if nowcount + 1 < totalcount:
@@ -443,8 +464,9 @@ def switch_tch (tchlist:list,usingtch:Session,usinginfo:list):
     else:
         usingtch = tchlist[0][0]
         usinginfo = tchlist[0]
-        
+
     return usingtch
+
 
 def getsubject(session: Session):
     re_fresh_auth_token(headerforerrbook)
@@ -473,7 +495,7 @@ def writefile(aaaa, filename: str):
     return filepaths
 
 
-def processerrorbook(sourceerror, startfrom: int, gradecode: str, hardcount: int, easycount: int, teachers: Session,requireSametype:bool):
+def processerrorbook(sourceerror, startfrom: int, gradecode: str, hardcount: int, easycount: int, teachers: Session, requireSametype: bool):
 
     before = "<p style='Margin:0px'><strong>第"
     errorbooklist = sourceerror["result"]["wrongTopics"]["list"]
@@ -521,9 +543,9 @@ def processerrorbook(sourceerror, startfrom: int, gradecode: str, hardcount: int
             useranswerlist.append(
                 question["wrongTopicRecordArchive"]["userAnswer"])
     lastorder = -1
-    if needsaveuseranswer == False :
-        i = 0 
-        while i<len(useranswerlist):
+    if needsaveuseranswer == False:
+        i = 0
+        while i < len(useranswerlist):
             useranswerlist[i] = ""
             i += 1
     for i in range(0, len(questionlists)):
@@ -649,28 +671,30 @@ def coventlist(rawlist: list):
         returnstr = returnstr[:-1] + "]"
         return returnstr
 
-def clear_expires(sourcestr:str):
-    front=sourcestr.find("&Expires=")
+
+def clear_expires(sourcestr: str):
+    front = sourcestr.find("&Expires=")
     if front == -1:
         front = sourcestr.find("Expires=")
-    if front == -1 :
+    if front == -1:
         return sourcestr
     else:
-        behiend=sourcestr.find("&",front+1)
-        if behiend == -1 :
+        behiend = sourcestr.find("&", front+1)
+        if behiend == -1:
             behiend = ""
-        if sourcestr[front] == "&" :
-            if isinstance(behiend,int) == True:
+        if sourcestr[front] == "&":
+            if isinstance(behiend, int) == True:
                 return sourcestr[0:front] + sourcestr[behiend:]
             else:
                 return sourcestr[0:front]
-        else :
-            if isinstance(behiend,int) == True:
+        else:
+            if isinstance(behiend, int) == True:
                 return sourcestr[0:front] + sourcestr[behiend+1:]
             else:
                 return sourcestr[0:front]
 
-def loop_clear_expires(sourcehtml:str):
+
+def loop_clear_expires(sourcehtml: str):
     tempresult = sourcehtml
     while tempresult != clear_expires(tempresult):
         tempresult = clear_expires(tempresult)
@@ -686,18 +710,19 @@ def read_question(teacher: Session, difficulty: str, knowledgeid: list, subjects
         questiontype = "0" + questiontype
     if len(gradecode) == 1:
         gradecode = "0" + gradecode
-
-    #print(u_tch_info[1],u_tch_info[2])
+    # 这里定义了无视难度
+    difficulty = "01;02;03"
+    # print(u_tch_info[1],u_tch_info[2])
     firstget = using_tch_session.get("https://www.zhixue.com/paperfresh/api/question/show/knowledge/getTopics?pageIndex=1&knowledgeSelectType=0&knowledgeType=0&knowledgeId=" + coventlist(knowledgeid) + "&paperId=&level=0&gradeCode=" + gradecode + "&sectionCode=&difficultyCode=" + difficulty +
-                           "&paperTypeCode=&topicFromCode=&areas=&year=&sortField=default&sortDirection=true&keyWord=+&knowledgeTag=01&keywordSearchField=topic&excludePapers=&isRelatedPapers=true", data="phaseCode=05&subjectCode="+subjectscode, verify=isVerifysslCert, headers=editheaders, cookies=teacher.cookies)
-    switch_tch(tchAccount,using_tch_session,u_tch_info)
+                                     "&paperTypeCode=&topicFromCode=&areas=&year=&sortField=default&sortDirection=true&keyWord=+&knowledgeTag=01&keywordSearchField=topic&excludePapers=&isRelatedPapers=true", data="phaseCode=05&subjectCode="+subjectscode, verify=isVerifysslCert, headers=editheaders, cookies=teacher.cookies)
+    switch_tch(tchAccount, using_tch_session, u_tch_info)
     time.sleep(requestdelay/len(tchAccount))
     while firstget.status_code != 200:
-        input("出错了：状态码：" + str(firstget.status_code))
-        #print(u_tch_info[1],u_tch_info[2])
+        input("出错了：状态码：" + str(firstget.status_code), u_tch_info)
+        # print(u_tch_info[1],u_tch_info[2])
         firstget = using_tch_session.get("https://www.zhixue.com/paperfresh/api/question/show/knowledge/getTopics?pageIndex=1&knowledgeSelectType=0&knowledgeType=0&knowledgeId=" + coventlist(knowledgeid) + "&paperId=&level=0&gradeCode=" + gradecode + "&sectionCode=&difficultyCode=" + difficulty +
-                               "&paperTypeCode=&topicFromCode=&areas=&year=&sortField=default&sortDirection=true&keyWord=+&knowledgeTag=01&keywordSearchField=topic&excludePapers=&isRelatedPapers=true", data="phaseCode=05&subjectCode="+subjectscode, verify=isVerifysslCert, headers=editheaders, cookies=teacher.cookies)
-        switch_tch(tchAccount,using_tch_session,u_tch_info)
+                                         "&paperTypeCode=&topicFromCode=&areas=&year=&sortField=default&sortDirection=true&keyWord=+&knowledgeTag=01&keywordSearchField=topic&excludePapers=&isRelatedPapers=true", data="phaseCode=05&subjectCode="+subjectscode, verify=isVerifysslCert, headers=editheaders, cookies=teacher.cookies)
+        switch_tch(tchAccount, using_tch_session, u_tch_info)
         time.sleep(requestdelay/len(tchAccount))
     firstget = json.loads(firstget.text)
     throwerror(firstget)
@@ -731,15 +756,15 @@ def read_question(teacher: Session, difficulty: str, knowledgeid: list, subjects
                 htmltext += arrangelist(realchoice)
             else:
                 secondget = using_tch_session.get("https://www.zhixue.com/paperfresh/api/question/show/knowledge/getTopics?pageIndex=" + str(pagechoice) + "&knowledgeSelectType=0&knowledgeType=0&knowledgeId=" + coventlist(knowledgeid) + "&paperId=&level=0&gradeCode=" + gradecode + "&sectionCode=&difficultyCode=" + difficulty +
-                                        "&paperTypeCode=&topicFromCode=&areas=&year=&sortField=default&sortDirection=true&keyWord=+&knowledgeTag=01&keywordSearchField=topic&excludePapers=&isRelatedPapers=true", data="phaseCode=05&subjectCode="+subjectscode, verify=isVerifysslCert, headers=editheaders, cookies=teacher.cookies)
+                                                  "&paperTypeCode=&topicFromCode=&areas=&year=&sortField=default&sortDirection=true&keyWord=+&knowledgeTag=01&keywordSearchField=topic&excludePapers=&isRelatedPapers=true", data="phaseCode=05&subjectCode="+subjectscode, verify=isVerifysslCert, headers=editheaders, cookies=teacher.cookies)
                 time.sleep(requestdelay/len(tchAccount))
-                switch_tch(tchAccount,using_tch_session,u_tch_info)
+                switch_tch(tchAccount, using_tch_session, u_tch_info)
                 while secondget.status_code != 200:
-                    input("出错了：状态码：" + str(secondget.status_code))
+                    input("出错了：状态码：" + str(secondget.status_code), u_tch_info)
                     secondget = using_tch_session.get("https://www.zhixue.com/paperfresh/api/question/show/knowledge/getTopics?pageIndex=1&knowledgeSelectType=0&knowledgeType=0&knowledgeId=" + coventlist(knowledgeid) + "&paperId=&level=0&gradeCode=" + gradecode + "&sectionCode=&difficultyCode=" + difficulty +
-                                            "&paperTypeCode=&topicFromCode=&areas=&year=&sortField=default&sortDirection=true&keyWord=+&knowledgeTag=01&keywordSearchField=topic&excludePapers=&isRelatedPapers=true", data="phaseCode=05&subjectCode="+subjectscode, verify=isVerifysslCert, headers=editheaders, cookies=teacher.cookies)
+                                                      "&paperTypeCode=&topicFromCode=&areas=&year=&sortField=default&sortDirection=true&keyWord=+&knowledgeTag=01&keywordSearchField=topic&excludePapers=&isRelatedPapers=true", data="phaseCode=05&subjectCode="+subjectscode, verify=isVerifysslCert, headers=editheaders, cookies=teacher.cookies)
                     time.sleep(requestdelay/len(tchAccount))
-                    switch_tch(tchAccount,using_tch_session,u_tch_info)
+                    switch_tch(tchAccount, using_tch_session, u_tch_info)
                 secondget = json.loads(secondget.text)
                 throwerror(secondget)
                 templist = 0
@@ -761,14 +786,14 @@ global using_tch_session
 using_tch_session = ""
 stuAccount = []
 print("本软件国内下载地址：https://gitee.com/w2016561536/zhixue_errorbook")
-if config_stu_name != "" and config_stu_pwd != "" :
+if config_stu_name != "" and config_stu_pwd != "":
     loginname = config_stu_name
     loginpwd = config_stu_pwd
     print("已从配置中读取学生用户名和密码")
 else:
     loginname = input("请输入学生账户用户名：")
     loginpwd = input("请输入学生账户密码：")
-loginrespond = loginwithpwd(loginname, loginpwd, 0)
+loginrespond = loginwithpwd(loginname, loginpwd, 0, "")
 student = loginrespond[0]
 useruid = loginrespond[1]
 username = loginrespond[2]
@@ -778,7 +803,7 @@ getstuinfo = json.loads(getstuinfo.text)
 cgrade = getstuinfo["student"]["clazz"]["grade"]["name"]
 dgrage = getstuinfo["student"]["clazz"]["grade"]["code"]
 print("年级：" + cgrade)
-#stuAccount.append([loginrespond,loginname,loginpwd])
+# stuAccount.append([loginrespond,loginname,loginpwd])
 teacher = ""
 hardcount = -2
 easycount = -2
@@ -786,15 +811,16 @@ tchAccount = []
 global u_tch_info
 u_tch_info = ""
 loginname = "a"
-while loginname != "" :
+while loginname != "":
     loginname = input("请输入教师账户用户名，用于推题：")
     if loginname:
         loginpwd = input("请输入教师账户密码：")
-        loginrespond = loginwithpwd(loginname, loginpwd, 0)
+        loginrespond = loginwithpwd(loginname, loginpwd, 0, "")
         teacher = loginrespond[0]
-        tchAccount.append([teacher, loginname, loginpwd])
+        tchrealname = loginrespond[2]
+        tchAccount.append([teacher, loginname, loginpwd, tchrealname])
         easycount = -1
-if easycount == -1 :
+if easycount == -1:
     using_tch_session = tchAccount[0][0]
     u_tch_info = tchAccount[0]
 requireSameType = False
@@ -830,12 +856,12 @@ if easycount == -1:
         hardcount = 0
     else:
         hardcount = int(hardcount)
-    
+
     requireSameType = input("是否需要按原题类型推题（是请随意输入后回车，否直接回车）：")
-    if requireSameType == "" :
+    if requireSameType == "":
         requireSameType = False
     else:
-        requireSameType =True
+        requireSameType = True
 
 startdateraw = input("请输入起始时间，格式为yyyy/mm/dd，无需补0：")
 global starttimestamp
@@ -883,7 +909,7 @@ print("学科：" + subjectdict[subjectcode], "\n起始时间：", recoginzedtim
     "%Y-%m-%d"), "\n终止时间：", endrecoginzedtime.strftime("%Y-%m-%d"))
 print("正在获取数据")
 htmltext = geterrorlists(student, subjectcode,
-                         starttimestamp, endtimestamp, dgrage, hardcount, easycount, subjectdict[subjectcode], using_tch_session,requireSameType,tchAccount)
+                         starttimestamp, endtimestamp, dgrage, hardcount, easycount, subjectdict[subjectcode], using_tch_session, requireSameType, tchAccount)
 htmltext += "</body>"
 htmltext += "<script>window.onload=function(){var c=document.getElementsByTagName(\"img\");for(var a=0,b;b=c[a];a++){if(b.width>630){b.width=630;}};var c=document.getElementsByTagName(\"table\");for(var a=0,b;b=c[a];a++){b.width=\"auto\"}};</script>\n"
 htmltext += "<script type=\"text/javascript\" async \nsrc=\"https://static.zhixue.com/common/mathjax/2.7.1/MathJax.js?config=TeX-AMS_CHTML\" async></script>"
