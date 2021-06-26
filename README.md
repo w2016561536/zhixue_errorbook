@@ -6,8 +6,8 @@
 为维护方便，删除了release，请直接在code中下载erroebook.py    
 
 ## 需要引用的库  
-  os,sys,typing,requests,json,hashlib,random,time,datetime,urllib  
- 其中，requests库可能python没有预装，可以在终端内使用指令`pip install requests==2.6.0`安装（新版本理论也行，我用的2.6.0）  
+  os,sys,typing,requests,json,hashlib,random,time,datetime,urllib,pillow,easygui  
+ 其中，requests,pillow,easygui库可能python没有预装，可以在终端内使用指令`pip install requests,pillow,easygui`安装    
 
 ## 使用方法    
 * 安装Python3环境（我使用的是Python3.8.7）  
